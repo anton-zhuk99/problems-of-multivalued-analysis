@@ -12,17 +12,21 @@ def func(x):
 
 
 def sub_grad(x):
-    if x[0] ** 2 + x[1] ** 2 <= x[0] + 4:
-        g_0 = 2
-        g_1 = -1
+    g = [x[0], x[1]]
+    if x[0] ** 2 + x[1] ** 2 < x[0] + 4:
+        g[0] = 2
+        g[1] = -1
+    elif x[0] ** 2 + x[1] ** 2 == x[0] + 4:
+        g[0] = np.random.uniform(-2, 2, g[0].shape)
+        g[1] = np.random.uniform(-2, 2, g[1].shape)
     else:
-        g_0 = 2 * x[0] + 1
-        g_1 = 2 * x[1] - 1
-    return np.array([g_0, g_1])
+        g[0] = 2 * x[0] + 1
+        g[1] = 2 * x[1] - 1
+    return np.array(g)
 
 
 # constant step implementation
-def optimize(x_0=np.array([0, 0]), step=0.01, acc=0.001, max_iter=10000):
+def optimize(x_0=np.array([0, 0]), step=0.01, max_iter=10000):
     def find_best_iter(vals):
         n = len(vals)
         k_best = 0
@@ -30,6 +34,8 @@ def optimize(x_0=np.array([0, 0]), step=0.01, acc=0.001, max_iter=10000):
             if vals[k] < vals[k_best]:
                 k_best = k
         return k_best
+
+    print(f'optimization parameters: x0=({x_0[0]}, {x_0[1]}), step={step}, iterations={max_iter}')
 
     args = [x_0]
     vals = [func(x_0)]
@@ -40,14 +46,10 @@ def optimize(x_0=np.array([0, 0]), step=0.01, acc=0.001, max_iter=10000):
         g = sub_grad(args[-1])
         args.append(args[-1] - step * g)
         vals.append(func(args[-1]))
-
-        stop_condition = la.norm(args[-1] - args[-2]) < acc and la.norm(vals[-1] - vals[-2]) < acc
-        if stop_condition:
-            break
-    print(f'optimize() reached the end, iterations count: {iter_count}')
+    print('optimize() reached the end')
 
     best_iter = find_best_iter(vals)
-    print(f'Best iteration index: {best_iter}')
+    print(f'best iteration index: {best_iter}')
 
     return args[best_iter], vals[best_iter]
 
@@ -64,7 +66,9 @@ def sub_grad_plot(optimum):
     w = 0.5 * np.sqrt(u ** 2 + v ** 2)
     u /= w
     v /= w
+    # draw gradient
     fig = ff.create_quiver(x=X1, y=X2, u=-u, v=-v, name='gradient')
+    # draw optimum
     fig.add_trace(
         go.Scatter(
             x=[optimum[0]],
@@ -73,37 +77,118 @@ def sub_grad_plot(optimum):
             line=dict(color='red', width=2)
         )
     )
+    # draw circle
+    fig.add_trace(
+        go.Contour(
+            z=X1 ** 2 + X2 ** 2 - X1 - 4,
+            x=x1,
+            y=x2,
+            name='$x_1^2+x_2^2-x_1-4=0$',
+            line=dict(
+                width=2,
+                color='orange'
+            ),
+            contours=dict(
+                coloring='lines',
+                start=0,
+                end=0,
+                size=2,
+            ),
+            showlegend=True
+        )
+    )
     fig.update_layout(width=800, height=800)
     return fig
 
 
 def func_plot(optimum, _width, _height, r=5, dpi=21):
+    # calculate surface points
     X1, X2 = np.meshgrid(
         np.linspace(-r, r, dpi),
         np.linspace(-r, r, dpi)
     )
     Z = func((X1, X2))
+    # draw circle
+    x1 = np.linspace(-r, r, dpi)
+    x21 = np.sqrt(-x1 ** 2 + x1 + 4)
+    x22 = - np.sqrt(-x1 ** 2 + x1 + 4)
+    z1 = func((x1, x21))
+    z2 = func((x1, x22))
+    x1_data = np.concatenate([x1, np.flip(x1)])
+    x2_data = np.concatenate([x21, np.flip(x22)])
+    z_data = np.concatenate([z1, np.flip(z2)])
+    # filter data
+    x1_data_clean = []
+    x2_data_clean = []
+    z_data_clean = []
+    num = x1_data.shape[0]
+    for i in range(num):
+        if not np.isnan(x2_data[i]):
+            x1_data_clean.append(x1_data[i])
+            x2_data_clean.append(x2_data[i])
+            z_data_clean.append(z_data[i])
     fig = go.Figure(data=[
-        go.Surface(z=Z, x=X1, y=X2, name='function'),
+        # draw optimum
+        go.Surface(
+            z=Z,
+            x=X1,
+            y=X2,
+            name='function',
+            showlegend=True
+        ),
+        # draw optimum
         go.Scatter3d(
             x=[optimum[0]],
             y=[optimum[1]],
             z=[func(optimum)],
             name='optimum',
-            line=dict(color='green', width=5))
+            line=dict(color='green', width=2)),
+        # draw circle
+        go.Scatter3d(
+            z=np.array(z_data_clean),
+            x=np.array(x1_data_clean),
+            y=np.array(x2_data_clean),
+            name='$x_1^2+x_2^2-x_1-4=0$',
+            line=dict(
+                color='orange',
+                width=1
+            ),
+            connectgaps=True
+        ),
+        # fill the gap
+        go.Scatter3d(
+            z=np.array([z_data_clean[0], z_data_clean[-1]]),
+            x=np.array([x1_data_clean[0], x1_data_clean[-1]]),
+            y=np.array([x2_data_clean[0], x2_data_clean[-1]]),
+            connectgaps=True,
+            line=dict(
+                color='orange',
+                width=1
+            ),
+            showlegend=False
+        )
     ])
-    fig.update_layout(width=_width, height=_height)
+    fig.update_layout(
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        ),
+        width=_width,
+        height=_height
+    )
     return fig
 
 
 def main():
-    x_opt, f_opt = optimize(x_0=np.array([-1, 1]), step=0.01, acc=0.001, max_iter=50000)
+    x_opt, f_opt = optimize(x_0=np.array([-100, 100]), step=0.0001, max_iter=70000)
     x_opt_real, f_opt_real = [1 / 2 - m.sqrt(17 / 5), m.sqrt(17 / 5) / 2], 1 - m.sqrt(85) / 2
-    print(f'accurate answer: \tx_opt=({(x_opt_real[0]):.4f}, {(x_opt_real[1]):.4f}), f_opt = {f_opt :.4f}')
-    print(f'computed answer: \tx_opt=({(x_opt[0]):.4f}, {(x_opt[1]):.4f}), f_opt = {f_opt :.4f}')
+    print(f'accurate answer: \tx_opt=({(x_opt_real[0]):.6f}, {(x_opt_real[1]):.6f}), f_opt = {f_opt_real :.6f}')
+    print(f'computed answer: \tx_opt=({(x_opt[0]):.6f}, {(x_opt[1]):.6f}), f_opt = {f_opt :.6f}')
     print('drawing plots ...')
     sb_plot = sub_grad_plot(x_opt)
-    fn_plot = func_plot(x_opt, 600, 800)
+    fn_plot = func_plot(x_opt, 1000, 800)
     sb_plot.show()
     fn_plot.show()
 
